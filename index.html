@@ -128,7 +128,7 @@
   var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-ApS2hAOh1Gy3qLsH4njnR-PfLmaD4V-3qewhbgpIxzmqi81L5plWvqWCgAtHCKqRBQ/exec"; 
 // [2] 방금 확인한 list.json 파일의 ID를 여기에 넣으세요 (필수!)
   var JSON_FILE_ID = "1-BYJ55hyH2K2yx-ACU2wSz0NTjoFrM5a";
-  
+  var cachedData = []; // 데이터를 저장해둘 전역 변수
   var currentPage = 1; var currentAdminKey = ""; var isAdminMode = false; var currentDetail = {};
 
   $(document).ready(function() {
@@ -181,42 +181,39 @@
 
   // [변경] callApi 사용
 function loadList() {
-    if(currentPage === 1) $('#listBody').html('<tr><td colspan="4">로딩 중...</td></tr>');
+  if(currentPage === 1) $('#listBody').html('<tr><td colspan="4">로딩 중...</td></tr>');
 
-    // [CASE A] 관리자 모드인 경우: 기존처럼 API 호출 (실시간 데이터 확인)
-    if (currentAdminKey) {
-      callApi("getList", { page: currentPage, adminKey: currentAdminKey }, renderList);
-    } 
-    // [CASE B] 일반 방문자인 경우: JSON 파일 직접 다운로드 (초고속 캐싱)
-    else {
-      // JSON 파일은 페이징이 안 된 전체 목록이므로, 여기서 잘라서 보여줍니다.
-      var jsonUrl = "https://drive.google.com/uc?export=download&id=" + JSON_FILE_ID;
-      
-      fetch(jsonUrl)
-        .then(res => res.json())
-        .then(data => {
-          // JSON 파일이 잘 읽혔으면 렌더링
-          var allItems = data.items;
-          var itemsPerPage = 15;
-          var start = (currentPage - 1) * itemsPerPage;
-          var end = start + itemsPerPage;
-          
-          var pageData = {
-            isAdmin: false,
-            items: allItems.slice(start, end),
-            hasMore: allItems.length > end,
-            success: true
-          };
-          renderList(pageData);
-        })
-        .catch(err => {
-          console.error("JSON 로드 실패, API로 전환합니다.", err);
-          // 만약 파일 로드에 실패하면(CORS 등), 비상용으로 API를 호출합니다.
-          callApi("getList", { page: currentPage, adminKey: "" }, renderList);
+  // 관리자면 실시간 조회
+  if (currentAdminKey) {
+    callApi("getList", { page: currentPage, adminKey: currentAdminKey }, renderList);
+  } 
+  // 일반 방문자면 JSON 파일 조회
+  else {
+    var jsonUrl = "https://drive.google.com/uc?export=download&id=" + JSON_FILE_ID;
+    
+    fetch(jsonUrl)
+      .then(res => res.json())
+      .then(data => {
+        cachedData = data.items; // [중요] 전체 데이터를 변수에 저장!
+        
+        // 페이징 처리
+        var itemsPerPage = 15;
+        var start = (currentPage - 1) * itemsPerPage;
+        var end = start + itemsPerPage;
+        
+        renderList({
+          isAdmin: false,
+          items: cachedData.slice(start, end),
+          hasMore: cachedData.length > end,
+          success: true
         });
-    }
+      })
+      .catch(err => {
+        console.error("JSON 실패, 백업 API 호출", err);
+        callApi("getList", { page: currentPage, adminKey: "" }, renderList);
+      });
   }
-
+}
 // [수정된 renderList 함수]
 function renderList(response) {
   // 1. 서버가 에러 메시지를 보낸 경우 처리
@@ -266,12 +263,27 @@ function renderList(response) {
 }
 
   // [변경] callApi 사용
-  function openDetail(rowNumber) {
-    $('#vBody').html('로딩 중...'); $('#vMedia').empty(); $('#vFiles').empty(); $('#vAdminArea').hide();
-    $('#viewModal').css('display', 'flex');
-    currentDetail.row = rowNumber;
+function openDetail(rowNumber) {
+  $('#vBody').html('로딩 중...'); $('#vMedia').empty(); $('#vFiles').empty(); $('#vAdminArea').hide();
+  $('#viewModal').css('display', 'flex');
+  currentDetail.row = rowNumber;
+
+  // 관리자는 수정해야 하니까 서버에서 최신 데이터 가져옴
+  if (isAdminMode || currentAdminKey) {
+     callApi("getPostDetail", { rowNumber: rowNumber }, function(data){ renderDetail(data, rowNumber); });
+     return;
+  }
+
+  // [핵심] 일반 사용자는 아까 받아둔 cachedData에서 즉시 꺼내옴 (0초)
+  var foundItem = cachedData.find(function(item) { return item.rowNumber === rowNumber; });
+
+  if (foundItem) {
+    renderDetail(foundItem, rowNumber); // 즉시 렌더링
+  } else {
+    // 만약 못 찾으면(페이징 등) 비상용 서버 호출
     callApi("getPostDetail", { rowNumber: rowNumber }, function(data){ renderDetail(data, rowNumber); });
   }
+}
 
   function renderDetail(data, rowNumber) {
     $('#vTitle').text(data.title); $('#vBody').html(data.content);
