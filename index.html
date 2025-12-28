@@ -123,38 +123,42 @@
 <div id="loadingOverlay" class="spinner-overlay"><div class="loader"></div><div id="loadingMsg" style="font-weight:bold; color:#555;">처리 중입니다...</div></div>
 
 <script>
-  // [중요] 배포한 앱스크립트 웹앱 URL을 여기에 넣어야 합니다.
-  // 끝에 /exec 로 끝나는 URL이어야 합니다.
+  // [1] 앱스크립트 배포 URL (기존에 쓰시던 /exec로 끝나는 주소)
   var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-ApS2hAOh1Gy3qLsH4njnR-PfLmaD4V-3qewhbgpIxzmqi81L5plWvqWCgAtHCKqRBQ/exec"; 
-// [2] 방금 확인한 list.json 파일의 ID를 여기에 넣으세요 (필수!)
-  var JSON_FILE_ID = "1-BYJ55hyH2K2yx-ACU2wSz0NTjoFrM5a";
-  var cachedData = []; // 데이터를 저장해둘 전역 변수
-  var currentPage = 1; var currentAdminKey = ""; var isAdminMode = false; var currentDetail = {};
+  
+  // [2] 아까 만드신 list.json 파일의 ID (구글 드라이브 링크 공유에서 가져온 것)
+  var JSON_FILE_ID = "1-BYJ55hyH2K2yx-ACU2wSz0NTjoFrM5a"; 
+
+  // [전역 변수]
+  var currentPage = 1; 
+  var currentAdminKey = ""; 
+  var isAdminMode = false; 
+  var currentDetail = {};
+  var cachedData = []; // [New] 데이터를 브라우저 메모리에 임시 보관할 변수
 
   $(document).ready(function() {
-    loadList();
+    loadList(); // 시작하자마자 목록 로딩
+
+    // 썸머노트 에디터 설정
     $('#summernote').summernote({
       placeholder: '내용을 입력하세요...', tabsize: 2, height: 250, lang: 'ko-KR', dialogsInBody: true,
       toolbar: [['style',['style']],['font',['bold','underline','color']],['para',['ul','ol','paragraph']],['table',['table']],['insert',['link','hr']],['view',['fullscreen','codeview','help']]]
     });
+    // 작성 중 내용 변경 감지
     $('#wTitle, #summernote').on('input change summernote.change', function() { $('#wIsSaved').val('false'); $('#btnCancel').text('취소'); });
   });
 
-  // [핵심 변경] google.script.run 대체용 API 호출 함수
+  // [API 호출 함수] 관리자 작업이나 비상시에 사용 (fetch API 활용)
   function callApi(action, payload, onSuccess) {
     var data = payload || {};
     data.action = action;
     
-    // fetch API 사용
     fetch(SCRIPT_URL, {
       method: "POST",
-      body: JSON.stringify(data) // 단순히 JSON 문자열을 보냄
-      // CORS 문제로 headers 조작 최소화 (text/plain으로 보냄)
+      body: JSON.stringify(data)
     })
     .then(response => response.json())
-    .then(json => {
-       onSuccess(json);
-    })
+    .then(json => { onSuccess(json); })
     .catch(err => {
        hideLoading();
        showModal("통신 오류가 발생했습니다.<br>" + err, 'alert');
@@ -162,133 +166,140 @@
     });
   }
 
-  // 시스템 모달 로직 (기존 동일)
-  var sysCallback = null;
-  function showModal(msg, type, callback) {
-    $('#sysMsg').html(msg); $('#sysBtnArea').empty(); sysCallback = callback;
-    if (type === 'confirm') {
-      $('#sysTitle').text('확인');
-      $('#sysBtnArea').append('<button class="btn-custom btn-admin" onclick="closeSystemModal()">취소</button>');
-      $('#sysBtnArea').append('<button class="btn-custom btn-write" style="display:inline-block;" onclick="confirmSystemModal()">확인</button>');
-    } else {
-      $('#sysTitle').text('알림');
-      $('#sysBtnArea').append('<button class="btn-custom btn-admin" onclick="confirmSystemModal()">확인</button>');
+  // [핵심 변경] 목록 불러오기 (캐시 우선 전략 + 백그라운드 업데이트)
+  function loadList() {
+    // 1페이지일 때만 로딩 문구 표시 (캐시가 있으면 이조차도 안 보일 만큼 빠름)
+    if(currentPage === 1) $('#listBody').html('<tr><td colspan="4">로딩 중...</td></tr>');
+
+    // [CASE A] 관리자 모드: 데이터 정확성이 생명이므로 항상 서버(API)와 통신
+    if (currentAdminKey) {
+      callApi("getList", { page: currentPage, adminKey: currentAdminKey }, renderList);
+      return;
     }
-    $('#systemModal').css('display', 'flex');
-  }
-  function closeSystemModal() { $('#systemModal').hide(); }
-  function confirmSystemModal() { $('#systemModal').hide(); if (sysCallback) sysCallback(); }
 
-  // [변경] callApi 사용
-function loadList() {
-  if(currentPage === 1) $('#listBody').html('<tr><td colspan="4">로딩 중...</td></tr>');
+    // [CASE B] 일반 방문자 모드: 로컬 스토리지 + JSON 파일 활용
 
-  // 관리자면 실시간 조회
-  if (currentAdminKey) {
-    callApi("getList", { page: currentPage, adminKey: currentAdminKey }, renderList);
-  } 
-  // 일반 방문자면 JSON 파일 조회
-  else {
+    // 1단계: 브라우저 저장소(LocalStorage) 확인 - (속도 0.01초)
+    var savedJson = localStorage.getItem("BOARD_CACHE");
+    if (savedJson && currentPage === 1) {
+      try {
+        var parsedData = JSON.parse(savedJson);
+        if (parsedData && parsedData.length > 0) {
+          cachedData = parsedData; // 메모리에 올림
+          console.log("⚡ [Fast Load] 캐시된 데이터로 즉시 화면 표시");
+          renderWithData(cachedData); // 기다림 없이 바로 그리기
+        }
+      } catch(e) {
+        console.error("캐시 파싱 오류(무시함)", e);
+      }
+    }
+
+    // 2단계: 백그라운드에서 최신 JSON 파일 요청 - (속도 0.5초)
     var jsonUrl = "https://drive.google.com/uc?export=download&id=" + JSON_FILE_ID;
     
     fetch(jsonUrl)
       .then(res => res.json())
       .then(data => {
-        cachedData = data.items; // [중요] 전체 데이터를 변수에 저장!
+        console.log("🔄 [Sync] 서버 최신 데이터 도착");
         
-        // 페이징 처리
-        var itemsPerPage = 15;
-        var start = (currentPage - 1) * itemsPerPage;
-        var end = start + itemsPerPage;
-        
-        renderList({
-          isAdmin: false,
-          items: cachedData.slice(start, end),
-          hasMore: cachedData.length > end,
-          success: true
-        });
+        // 데이터 교체
+        cachedData = data.items; 
+
+        // 다음 방문을 위해 브라우저 저장소 덮어쓰기 (자동 삭제/갱신 효과)
+        try { localStorage.setItem("BOARD_CACHE", JSON.stringify(cachedData)); } catch(e) {}
+
+        // 화면 갱신 (새 글이 있었다면 이때 바뀜)
+        renderWithData(cachedData);
       })
       .catch(err => {
-        console.error("JSON 실패, 백업 API 호출", err);
-        callApi("getList", { page: currentPage, adminKey: "" }, renderList);
+        console.error("JSON 로드 실패", err);
+        // 캐시도 없고 파일 로드도 실패했을 때만 비상용 API 호출
+        if (!cachedData || cachedData.length === 0) {
+            callApi("getList", { page: currentPage, adminKey: "" }, renderList);
+        }
       });
   }
-}
-// [수정된 renderList 함수]
-function renderList(response) {
-  // 1. 서버가 에러 메시지를 보낸 경우 처리
-  if (response.success === false) {
-    // 앱스크립트 배포 문제일 확률이 높음
-    showModal("서버 오류: " + (response.msg || "데이터를 가져올 수 없습니다."), 'alert');
-    return;
+
+  // [보조] 데이터를 받아 화면을 그리는 내부 함수
+  function renderWithData(dataList) {
+      var itemsPerPage = 15;
+      var start = (currentPage - 1) * itemsPerPage;
+      var end = start + itemsPerPage;
+      
+      renderList({
+        isAdmin: false,
+        items: dataList.slice(start, end),
+        hasMore: dataList.length > end,
+        success: true
+      });
   }
 
-  // 2. items가 아예 없는 경우 방어 (여기서 length 에러 방지)
-  if (!response.items) {
-    console.error("서버 응답:", response); // 개발자 도구 콘솔에서 확인용
-    showModal("서버에서 목록을 받지 못했습니다. (배포 버전을 확인해주세요)", 'alert');
-    return;
+  // [목록 렌더링 함수] - 기존과 동일하지만 안전장치 강화
+  function renderList(response) {
+    if (response.success === false) { showModal("서버 오류: " + (response.msg || "데이터를 가져올 수 없습니다."), 'alert'); return; }
+    if (!response.items) { response.items = []; }
+
+    isAdminMode = response.isAdmin || (currentAdminKey !== "");
+    if (currentPage === 1) $('#listBody').empty();
+    $('.col-chk').show(); 
+    
+    if(isAdminMode) {
+      $('#writeBtn').show(); $('#adminToggleBtn').text('🔓 로그아웃').attr('onclick', 'doLogout()'); $('#checkAll').show();
+    } else {
+      $('#writeBtn').hide(); $('#adminToggleBtn').text('🔒 관리자').attr('onclick', 'openLoginModal()'); $('#checkAll').hide();
+    }
+    $('#bulkActionArea').hide();
+
+    if (response.items.length === 0 && currentPage === 1) {
+      $('#listBody').html('<tr><td colspan="4">게시글이 없습니다.</td></tr>');
+      $('#moreBtn').hide(); return;
+    }
+
+    response.items.forEach(function(item) {
+      var noDisplay = item.status === "게시" ? item.displayNo : "<span class='badge-wait'>[대기]</span>";
+      var titlePrefix = item.status !== "게시" ? "<span style='color:#ccc'>(비공개) </span>" : "";
+      var chkHtml = isAdminMode ? `<input type="checkbox" class="list-chk" value="${item.rowNumber}" onclick="toggleBulkBtn()">` : "";
+      var html = `<tr><td class="col-chk">${chkHtml}</td><td class="col-no">${noDisplay}</td><td class="col-title" onclick="openDetail(${item.rowNumber})"><span class="title-text">${titlePrefix}${item.title}</span></td><td class="col-date">${item.date}</td></tr>`;
+      $('#listBody').append(html);
+    });
+    
+    if (response.hasMore) { $('#moreBtn').show(); currentPage++; } else { $('#moreBtn').hide(); }
   }
 
-  isAdminMode = response.isAdmin;
-  if (currentPage === 1) $('#listBody').empty();
-  $('.col-chk').show(); 
-  
-  if(isAdminMode) {
-    $('#writeBtn').show(); 
-    $('#adminToggleBtn').text('🔓 로그아웃').attr('onclick', 'doLogout()');
-    $('#checkAll').show();
-  } else {
-    $('#writeBtn').hide(); 
-    $('#adminToggleBtn').text('🔒 관리자').attr('onclick', 'openLoginModal()');
-    $('#checkAll').hide();
-  }
-  $('#bulkActionArea').hide();
+  // [상세보기 함수] - 캐시된 데이터 활용하여 즉시 오픈 (0초 로딩)
+  function openDetail(rowNumber) {
+    $('#vBody').html('로딩 중...'); $('#vMedia').empty(); $('#vFiles').empty(); $('#vAdminArea').hide();
+    $('#viewModal').css('display', 'flex');
+    currentDetail.row = rowNumber;
 
-  if (response.items.length === 0 && currentPage === 1) {
-    $('#listBody').html('<tr><td colspan="4">게시글이 없습니다.</td></tr>');
-    $('#moreBtn').hide(); 
-    return;
-  }
+    // 관리자: 수정/삭제를 위해 항상 최신 상태 확인 (서버 호출)
+    if (isAdminMode || currentAdminKey) {
+       callApi("getPostDetail", { rowNumber: rowNumber }, function(data){ renderDetail(data, rowNumber); });
+       return;
+    }
 
-  response.items.forEach(function(item) {
-    var noDisplay = item.status === "게시" ? item.displayNo : "<span class='badge-wait'>[대기]</span>";
-    var titlePrefix = item.status !== "게시" ? "<span style='color:#ccc'>(비공개) </span>" : "";
-    var chkHtml = isAdminMode ? `<input type="checkbox" class="list-chk" value="${item.rowNumber}" onclick="toggleBulkBtn()">` : "";
-    var html = `<tr><td class="col-chk">${chkHtml}</td><td class="col-no">${noDisplay}</td><td class="col-title" onclick="openDetail(${item.rowNumber})"><span class="title-text">${titlePrefix}${item.title}</span></td><td class="col-date">${item.date}</td></tr>`;
-    $('#listBody').append(html);
-  });
-  
-  if (response.hasMore) { $('#moreBtn').show(); currentPage++; } else { $('#moreBtn').hide(); }
-}
+    // 일반 방문자: 이미 받아둔 cachedData에서 찾음 (서버 호출 X)
+    var foundItem = cachedData.find(function(item) { return item.rowNumber === rowNumber; });
 
-  // [변경] callApi 사용
-function openDetail(rowNumber) {
-  $('#vBody').html('로딩 중...'); $('#vMedia').empty(); $('#vFiles').empty(); $('#vAdminArea').hide();
-  $('#viewModal').css('display', 'flex');
-  currentDetail.row = rowNumber;
-
-  // 관리자는 수정해야 하니까 서버에서 최신 데이터 가져옴
-  if (isAdminMode || currentAdminKey) {
-     callApi("getPostDetail", { rowNumber: rowNumber }, function(data){ renderDetail(data, rowNumber); });
-     return;
+    if (foundItem) {
+      // 찾았으면 즉시 렌더링
+      renderDetail(foundItem, rowNumber);
+    } else {
+      // (혹시 못 찾았으면) 비상용 서버 호출
+      callApi("getPostDetail", { rowNumber: rowNumber }, function(data){ renderDetail(data, rowNumber); });
+    }
   }
 
-  // [핵심] 일반 사용자는 아까 받아둔 cachedData에서 즉시 꺼내옴 (0초)
-  var foundItem = cachedData.find(function(item) { return item.rowNumber === rowNumber; });
-
-  if (foundItem) {
-    renderDetail(foundItem, rowNumber); // 즉시 렌더링
-  } else {
-    // 만약 못 찾으면(페이징 등) 비상용 서버 호출
-    callApi("getPostDetail", { rowNumber: rowNumber }, function(data){ renderDetail(data, rowNumber); });
-  }
-}
-
+  // [상세 내용 그리기] - 본문, 파일링크, 유튜브 처리
   function renderDetail(data, rowNumber) {
-    $('#vTitle').text(data.title); $('#vBody').html(data.content);
-    currentDetail.fileLinks = data.fileLinks; currentDetail.folderId = data.folderId; currentDetail.status = data.status;
+    $('#vTitle').text(data.title); 
+    $('#vBody').html(data.content); // HTML 본문 렌더링
+    
+    currentDetail.fileLinks = data.fileLinks; 
+    currentDetail.folderId = data.folderId; 
+    currentDetail.status = data.status;
 
+    // 관리자 버튼 표시
     if(isAdminMode) {
       var buttons = `<button class="btn-custom btn-admin" onclick="openEditMode()">수정</button> `;
       if (data.status === "게시") buttons += `<button class="btn-custom btn-admin" onclick="changeStatus(${rowNumber}, '대기')">대기전환</button> `;
@@ -297,6 +308,7 @@ function openDetail(rowNumber) {
       $('#vAdminArea').html(buttons).show();
     }
 
+    // 첨부파일 및 유튜브 링크 처리
     if (data.fileLinks && data.fileLinks.trim() !== "") {
       var lines = data.fileLinks.split('\n');
       lines.forEach(function(line, idx) {
@@ -314,80 +326,63 @@ function openDetail(rowNumber) {
           if (/\.pdf$/i.test(name)) icon = "📕";
           if (/\.(xls|xlsx)$/i.test(name)) icon = "📊";
           var downloadUrl = "https://drive.google.com/uc?export=download&id=" + fileId;
-          var html = `
-            <div class="file-accordion-btn" onclick="$('#${uniqueId}').slideToggle()"><span class="file-icon">${icon}</span> ${name}</div>
-            <div id="${uniqueId}" class="file-actions-panel">
-              <a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" class="action-btn btn-view">새 창에서 보기</a>
-              <a href="${downloadUrl}" target="_blank" class="action-btn btn-down">💾 다운로드</a>
-            </div>`;
+          // 파일은 클릭 시 아코디언 열림
+          var html = `<div class="file-accordion-btn" onclick="$('#${uniqueId}').slideToggle()"><span class="file-icon">${icon}</span> ${name}</div><div id="${uniqueId}" class="file-actions-panel"><a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" class="action-btn btn-view">새 창에서 보기</a><a href="${downloadUrl}" target="_blank" class="action-btn btn-down">💾 다운로드</a></div>`;
           $('#vFiles').append(html);
         }
       });
     }
   }
 
+  // [유튜브 ID 추출]
   function getYoutubeId(url) {
     var regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     var match = url.match(regExp); return (match && match[2].length == 11) ? match[2] : null;
   }
 
+  // [글쓰기 모달 열기]
   function openWriteModal() { $('#wHeader').text('새 공지사항 작성'); $('#wRowNumber').val(''); $('#wExistingFolderId').val(''); $('#existingFiles').empty(); $('#wTitle').val(''); $('#summernote').summernote('code', ''); $('#fileList').html('<div style="margin-bottom:5px;"><input type="file" name="wFiles"></div>'); $('#wIsSaved').val('false'); $('#btnCancel').text('취소'); $('#writeModal').css('display', 'flex'); }
   
+  // [수정 모드 진입]
   function openEditMode() {
     closeModalDirect('viewModal');
     $('#wHeader').text('공지사항 수정');
     $('#wRowNumber').val(currentDetail.row);
     $('#wExistingFolderId').val(currentDetail.folderId);
     $('#wTitle').val($('#vTitle').text());
-    $('#summernote').summernote('code', $('#vBody').html());
-    
+    $('#summernote').summernote('code', $('#vBody').html()); // 본문 내용 에디터에 삽입
     $('#existingFiles').empty();
+    // 기존 파일 목록 로드
     if(currentDetail.fileLinks) {
        var lines = currentDetail.fileLinks.split('\n');
        lines.forEach(function(line) {
          if(!line.trim()) return;
          var parts = line.split('|');
          var name = parts[0];
-         var html = `
-           <div class="edit-file-item" data-link="${line}">
-             <span>📄 ${name}</span>
-             <button type="button" class="btn-file-del" onclick="$(this).parent().remove()">삭제</button>
-           </div>`;
+         var html = `<div class="edit-file-item" data-link="${line}"><span>📄 ${name}</span><button type="button" class="btn-file-del" onclick="$(this).parent().remove()">삭제</button></div>`;
          $('#existingFiles').append(html);
        });
     }
-    
     $('#fileList').html('<div style="margin-bottom:5px;"><input type="file" name="wFiles"></div>');
     $('#wIsSaved').val('false'); $('#btnCancel').text('취소');
     $('#writeModal').css('display', 'flex');
   }
 
+  // [작성 취소 핸들러]
   function handleWriteClose() { var isSaved = $('#wIsSaved').val() === 'true'; if (isSaved) { $('#writeModal').hide(); currentPage = 1; loadList(); } else { showModal("작성 중인 내용이 사라집니다.<br>취소하시겠습니까?", 'confirm', function() { $('#writeModal').hide(); }); } }
   
-  // [변경] callApi 사용
+  // [게시글 저장 (API 호출)] - 저장 후에는 자동으로 JSON이 갱신됨(백엔드 로직)
   function submitPost(status) {
     var title = $('#wTitle').val(); var content = $('#summernote').summernote('code');
     if (!title) return showModal("제목을 입력하세요.", 'alert');
     showLoading("저장 중...");
-    
     var keptLinks = [];
-    $('.edit-file-item').each(function() {
-      keptLinks.push($(this).attr('data-link'));
-    });
-    
+    $('.edit-file-item').each(function() { keptLinks.push($(this).attr('data-link')); });
     var fileInputs = document.getElementsByName('wFiles'); var promises = [];
     Array.from(fileInputs).forEach(function(input) { if (input.files.length > 0) { var file = input.files[0]; var p = new Promise(function(resolve) { var reader = new FileReader(); reader.onload = function(e) { resolve({ name: file.name, mimeType: file.type, data: e.target.result.split(',')[1] }); }; reader.readAsDataURL(file); }); promises.push(p); } });
     
     Promise.all(promises).then(function(files) { 
-      var payload = { 
-        data: {
-            password: currentAdminKey, title: title, content: content, status: status, files: files, 
-            rowNumber: $('#wRowNumber').val(), 
-            existingFolderId: $('#wExistingFolderId').val(), 
-            existingLinks: keptLinks.join('\n')
-        }
-      }; 
-      // callApi로 변경
+      var payload = { data: { password: currentAdminKey, title: title, content: content, status: status, files: files, rowNumber: $('#wRowNumber').val(), existingFolderId: $('#wExistingFolderId').val(), existingLinks: keptLinks.join('\n') } }; 
       callApi("savePost", payload, function(res) {
         hideLoading();
         if (res.success) { 
@@ -398,27 +393,41 @@ function openDetail(rowNumber) {
     });
   }
 
+  // [체크박스 및 일괄 처리 로직]
   function toggleAllChecks() { var checked = $('#checkAll').prop('checked'); $('.list-chk').prop('checked', checked); toggleBulkBtn(); }
   function toggleBulkBtn() { var count = $('.list-chk:checked').length; if(count > 0) $('#bulkActionArea').css('display', 'flex'); else $('#bulkActionArea').hide(); }
-  
-  // [변경] callApi 사용
-  function doBulk(action) { var checked = $('.list-chk:checked'); if(checked.length === 0) return; var rows = []; checked.each(function() { rows.push($(this).val()); }); var msg = (action === 'delete') ? "정말 삭제하시겠습니까?" : "선택한 항목을 변경하시겠습니까?"; showModal(msg, 'confirm', function() { showLoading("처리 중..."); 
-    callApi("processBulkAction", {actType: action, rows: rows, key: currentAdminKey}, function(res){ hideLoading(); if(res.success) { showModal("처리되었습니다.", 'alert', function() { currentPage=1; loadList(); $('#checkAll').prop('checked', false); }); } else showModal("오류: " + res.msg, 'alert'); }); }); }
+  function doBulk(action) { var checked = $('.list-chk:checked'); if(checked.length === 0) return; var rows = []; checked.each(function() { rows.push($(this).val()); }); var msg = (action === 'delete') ? "정말 삭제하시겠습니까?" : "선택한 항목을 변경하시겠습니까?"; showModal(msg, 'confirm', function() { showLoading("처리 중..."); callApi("processBulkAction", {actType: action, rows: rows, key: currentAdminKey}, function(res){ hideLoading(); if(res.success) { showModal("처리되었습니다.", 'alert', function() { currentPage=1; loadList(); $('#checkAll').prop('checked', false); }); } else showModal("오류: " + res.msg, 'alert'); }); }); }
 
-  // [변경] callApi 사용
+  // [삭제 및 상태변경]
   function deletePost(row) { showModal("정말 삭제하시겠습니까?", 'confirm', function() { showLoading("삭제 중..."); callApi("deletePost", {row: row, folderId: currentDetail.folderId, key: currentAdminKey}, function(res){ hideLoading(); if(res.success){ showModal("삭제되었습니다.", 'alert', function(){ closeModalDirect('viewModal'); currentPage=1; loadList(); }); } }); }); }
-  
-  // [변경] callApi 사용
   function changeStatus(row, status) { callApi("updateStatus", {row: row, status: status}, function() { showModal("상태가 변경되었습니다.", 'alert', function(){ closeModalDirect('viewModal'); currentPage=1; loadList(); }); }); }
-  
+
+  // [로그인 및 UI 유틸]
   function openLoginModal() { $('#adminPwInput').val(''); $('#loginModal').css('display', 'flex'); setTimeout(function(){$('#adminPwInput').focus();},100); }
   function doLogin() { var pw=$('#adminPwInput').val(); if(!pw)return; currentAdminKey=pw; currentPage=1; loadList(); closeModalDirect('loginModal'); }
   function doLogout() { showModal("로그아웃 하시겠습니까?",'confirm',function(){currentAdminKey=""; isAdminMode=false; currentPage=1; loadList();}); }
   function addFileInput() { $('#fileList').append('<div style="margin-top:5px; display:flex;"><input type="file" name="wFiles"> <button onclick="$(this).parent().remove()" style="border:none; bg:none; color:red; margin-left:5px;">x</button></div>'); }
+  
+  // [모달 닫기 및 로딩바]
   function closeModal(e, id, allowBgClick) { if (allowBgClick && e.target.id === id) document.getElementById(id).style.display = 'none'; }
   function closeModalDirect(id) { document.getElementById(id).style.display = 'none'; }
   function showLoading(msg) { $('#loadingMsg').html(msg); $('#loadingOverlay').css('display', 'flex'); }
   function hideLoading() { $('#loadingOverlay').hide(); }
+  
+  // [시스템 모달]
+  var sysCallback = null;
+  function showModal(msg, type, callback) {
+    $('#sysMsg').html(msg); $('#sysBtnArea').empty(); sysCallback = callback;
+    if (type === 'confirm') {
+      $('#sysTitle').text('확인');
+      $('#sysBtnArea').append('<button class="btn-custom btn-admin" onclick="closeSystemModal()">취소</button>');
+      $('#sysBtnArea').append('<button class="btn-custom btn-write" style="display:inline-block;" onclick="confirmSystemModal()">확인</button>');
+    } else {
+      $('#sysTitle').text('알림');
+      $('#sysBtnArea').append('<button class="btn-custom btn-admin" onclick="confirmSystemModal()">확인</button>');
+    }
+    $('#systemModal').css('display', 'flex');
+  }
+  function closeSystemModal() { $('#systemModal').hide(); }
+  function confirmSystemModal() { $('#systemModal').hide(); if (sysCallback) sysCallback(); }
 </script>
-</body>
-</html>
