@@ -183,33 +183,53 @@
     callApi("getList", { page: currentPage, adminKey: currentAdminKey }, renderList);
   }
 
-  function renderList(response) {
-    isAdminMode = response.isAdmin;
-    if (currentPage === 1) $('#listBody').empty();
-    $('.col-chk').show(); 
-    if(isAdminMode) {
-      $('#writeBtn').show(); $('#adminToggleBtn').text('🔓 로그아웃').attr('onclick', 'doLogout()');
-      $('#checkAll').show();
-    } else {
-      $('#writeBtn').hide(); $('#adminToggleBtn').text('🔒 관리자').attr('onclick', 'openLoginModal()');
-      $('#checkAll').hide();
-    }
-    $('#bulkActionArea').hide();
-
-    if (response.items.length === 0 && currentPage === 1) {
-      $('#listBody').html('<tr><td colspan="4">게시글이 없습니다.</td></tr>');
-      $('#moreBtn').hide(); return;
-    }
-
-    response.items.forEach(function(item) {
-      var noDisplay = item.status === "게시" ? item.displayNo : "<span class='badge-wait'>[대기]</span>";
-      var titlePrefix = item.status !== "게시" ? "<span style='color:#ccc'>(비공개) </span>" : "";
-      var chkHtml = isAdminMode ? `<input type="checkbox" class="list-chk" value="${item.rowNumber}" onclick="toggleBulkBtn()">` : "";
-      var html = `<tr><td class="col-chk">${chkHtml}</td><td class="col-no">${noDisplay}</td><td class="col-title" onclick="openDetail(${item.rowNumber})"><span class="title-text">${titlePrefix}${item.title}</span></td><td class="col-date">${item.date}</td></tr>`;
-      $('#listBody').append(html);
-    });
-    if (response.hasMore) { $('#moreBtn').show(); currentPage++; } else { $('#moreBtn').hide(); }
+// [수정된 renderList 함수]
+function renderList(response) {
+  // 1. 서버가 에러 메시지를 보낸 경우 처리
+  if (response.success === false) {
+    // 앱스크립트 배포 문제일 확률이 높음
+    showModal("서버 오류: " + (response.msg || "데이터를 가져올 수 없습니다."), 'alert');
+    return;
   }
+
+  // 2. items가 아예 없는 경우 방어 (여기서 length 에러 방지)
+  if (!response.items) {
+    console.error("서버 응답:", response); // 개발자 도구 콘솔에서 확인용
+    showModal("서버에서 목록을 받지 못했습니다. (배포 버전을 확인해주세요)", 'alert');
+    return;
+  }
+
+  isAdminMode = response.isAdmin;
+  if (currentPage === 1) $('#listBody').empty();
+  $('.col-chk').show(); 
+  
+  if(isAdminMode) {
+    $('#writeBtn').show(); 
+    $('#adminToggleBtn').text('🔓 로그아웃').attr('onclick', 'doLogout()');
+    $('#checkAll').show();
+  } else {
+    $('#writeBtn').hide(); 
+    $('#adminToggleBtn').text('🔒 관리자').attr('onclick', 'openLoginModal()');
+    $('#checkAll').hide();
+  }
+  $('#bulkActionArea').hide();
+
+  if (response.items.length === 0 && currentPage === 1) {
+    $('#listBody').html('<tr><td colspan="4">게시글이 없습니다.</td></tr>');
+    $('#moreBtn').hide(); 
+    return;
+  }
+
+  response.items.forEach(function(item) {
+    var noDisplay = item.status === "게시" ? item.displayNo : "<span class='badge-wait'>[대기]</span>";
+    var titlePrefix = item.status !== "게시" ? "<span style='color:#ccc'>(비공개) </span>" : "";
+    var chkHtml = isAdminMode ? `<input type="checkbox" class="list-chk" value="${item.rowNumber}" onclick="toggleBulkBtn()">` : "";
+    var html = `<tr><td class="col-chk">${chkHtml}</td><td class="col-no">${noDisplay}</td><td class="col-title" onclick="openDetail(${item.rowNumber})"><span class="title-text">${titlePrefix}${item.title}</span></td><td class="col-date">${item.date}</td></tr>`;
+    $('#listBody').append(html);
+  });
+  
+  if (response.hasMore) { $('#moreBtn').show(); currentPage++; } else { $('#moreBtn').hide(); }
+}
 
   // [변경] callApi 사용
   function openDetail(rowNumber) {
