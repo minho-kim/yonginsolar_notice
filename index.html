@@ -126,7 +126,9 @@
   // [중요] 배포한 앱스크립트 웹앱 URL을 여기에 넣어야 합니다.
   // 끝에 /exec 로 끝나는 URL이어야 합니다.
   var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-ApS2hAOh1Gy3qLsH4njnR-PfLmaD4V-3qewhbgpIxzmqi81L5plWvqWCgAtHCKqRBQ/exec"; 
-
+// [2] 방금 확인한 list.json 파일의 ID를 여기에 넣으세요 (필수!)
+  var JSON_FILE_ID = "1-BYJ55hyH2K2yx-ACU2wSz0NTjoFrM5a";
+  
   var currentPage = 1; var currentAdminKey = ""; var isAdminMode = false; var currentDetail = {};
 
   $(document).ready(function() {
@@ -178,9 +180,41 @@
   function confirmSystemModal() { $('#systemModal').hide(); if (sysCallback) sysCallback(); }
 
   // [변경] callApi 사용
-  function loadList() {
+function loadList() {
     if(currentPage === 1) $('#listBody').html('<tr><td colspan="4">로딩 중...</td></tr>');
-    callApi("getList", { page: currentPage, adminKey: currentAdminKey }, renderList);
+
+    // [CASE A] 관리자 모드인 경우: 기존처럼 API 호출 (실시간 데이터 확인)
+    if (currentAdminKey) {
+      callApi("getList", { page: currentPage, adminKey: currentAdminKey }, renderList);
+    } 
+    // [CASE B] 일반 방문자인 경우: JSON 파일 직접 다운로드 (초고속 캐싱)
+    else {
+      // JSON 파일은 페이징이 안 된 전체 목록이므로, 여기서 잘라서 보여줍니다.
+      var jsonUrl = "https://drive.google.com/uc?export=download&id=" + JSON_FILE_ID;
+      
+      fetch(jsonUrl)
+        .then(res => res.json())
+        .then(data => {
+          // JSON 파일이 잘 읽혔으면 렌더링
+          var allItems = data.items;
+          var itemsPerPage = 15;
+          var start = (currentPage - 1) * itemsPerPage;
+          var end = start + itemsPerPage;
+          
+          var pageData = {
+            isAdmin: false,
+            items: allItems.slice(start, end),
+            hasMore: allItems.length > end,
+            success: true
+          };
+          renderList(pageData);
+        })
+        .catch(err => {
+          console.error("JSON 로드 실패, API로 전환합니다.", err);
+          // 만약 파일 로드에 실패하면(CORS 등), 비상용으로 API를 호출합니다.
+          callApi("getList", { page: currentPage, adminKey: "" }, renderList);
+        });
+    }
   }
 
 // [수정된 renderList 함수]
