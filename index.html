@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/lang/summernote-ko-KR.min.js"></script>
+
+  <style>
+    body { font-family: 'Apple SD Gothic Neo', sans-serif; padding: 20px; background-color: #f9f9f9; }
+    .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); max-width: 900px; margin: 0 auto; }
+    h2 { margin-top: 0; font-size: 24px; color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; } 
+    th, td { padding: 12px 8px; border-bottom: 1px solid #eee; text-align: center; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    th { background: #f8f8f8; color: #555; font-weight: bold; }
+
+    .col-chk { width: 40px; } .col-no { width: 60px; } .col-date { width: 100px; }
+    .col-title { width: auto; text-align: left; padding-left: 15px; } 
+    .title-text { cursor: pointer; color: #333; text-decoration: none; display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    .title-text:hover { text-decoration: underline; color: #4285f4; }
+    .badge-wait { color: #ff5252; font-weight: bold; font-size: 11px; margin-right: 5px; border:1px solid #ff5252; padding: 1px 3px; border-radius: 3px; background:#fff; }
+    
+    #bulkActionArea { display: none; background: #e8f0fe; padding: 10px; margin-bottom: 10px; border-radius: 5px; text-align: right; align-items: center; justify-content: flex-end; gap: 5px; }
+    
+    .btn-custom { padding: 6px 12px; border-radius: 4px; border: none; cursor: pointer; font-size: 13px; transition: 0.2s; }
+    .btn-admin { background: #eee; color: #555; }
+    .btn-write { background: #4285f4; color: white; display: none; }
+    .btn-more { width: 100%; background: #fff; border: 1px solid #ddd; padding: 10px; margin-top: 10px; color: #666; }
+    .btn-danger { background: #ff5252; color: white; }
+    .btn-success { background: #28a745; color: white; }
+    
+    .file-accordion-btn { display: flex; align-items: center; width: 100%; text-align: left; background: #f8f9fa; border: 1px solid #ddd; padding: 12px; margin-bottom: 5px; border-radius: 6px; cursor: pointer; color: #333; font-weight: bold; transition: 0.2s; }
+    .file-accordion-btn:hover { background: #e8eaed; border-color: #bbb; }
+    .file-icon { margin-right: 8px; font-size: 16px; }
+    
+    .file-actions-panel { display: none; background: #fafafa; border: 1px solid #eee; border-top: none; padding: 15px; margin-bottom: 10px; margin-top: -6px; border-radius: 0 0 6px 6px; text-align: center; }
+    .action-btn { display: inline-block; padding: 8px 16px; margin: 0 5px; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: bold; transition: 0.2s; cursor: pointer; }
+    .btn-view { background-color: #4285f4; color: white; border: 1px solid #4285f4; }
+    .btn-view:hover { background-color: #3367d6; color: white; text-decoration: none; }
+    .btn-down { background-color: #fff; color: #555; border: 1px solid #ccc; }
+    .btn-down:hover { background-color: #f1f1f1; color: #333; text-decoration: none; }
+
+    .edit-file-item { display: flex; justify-content: space-between; align-items: center; background: #fff; border: 1px solid #ddd; padding: 8px 12px; margin-bottom: 5px; border-radius: 4px; font-size: 13px; }
+    .btn-file-del { background: #ff5252; color: white; border: none; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+    .btn-file-del:hover { background: #d32f2f; }
+
+    .video-container { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; margin-bottom: 20px; border-radius: 8px; background: #000; }
+    .video-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+    .modal-box { background: white; width: 90%; max-width: 800px; max-height: 90vh; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.2); animation: popIn 0.2s; }
+    @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal-header { padding: 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background: #fff; box-sizing: border-box; }
+    .modal-header h3 { flex-grow: 1; text-align: left; }
+    .modal-header .close { font-size: 24px; cursor: pointer; padding: 0 5px; color:#999; border:none; background:none;}
+    .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+    .modal-footer { padding: 15px; border-top: 1px solid #ddd; text-align: right; background: #f8f8f8; display: flex; justify-content: flex-end; gap: 10px; }
+    .modal-mini { max-width: 350px; height: auto; }
+    
+    .note-modal-backdrop { z-index: 2050 !important; }
+    .note-modal { z-index: 2060 !important; }
+    #systemModal { z-index: 3000; }
+    
+    .spinner-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 4000; justify-content: center; align-items: center; flex-direction: column; }
+    .loader { border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2><span>📢 공지사항 (GitHub Ver.)</span><div><button id="adminToggleBtn" class="btn-custom btn-admin" onclick="openLoginModal()">🔒 관리자</button><button id="writeBtn" class="btn-custom btn-write" onclick="openWriteModal()">✏️ 글쓰기</button></div></h2>
+  <div id="bulkActionArea">
+    <span style="font-weight:bold; margin-right:10px; color:#333;">선택 항목 :</span>
+    <button class="btn-custom btn-success" onclick="doBulk('게시')">선택 게시</button>
+    <button class="btn-custom btn-admin" onclick="doBulk('대기')">선택 대기</button>
+    <button class="btn-custom btn-danger" onclick="doBulk('delete')">선택 삭제</button>
+  </div>
+  <table>
+    <thead><tr><th class="col-chk"><input type="checkbox" id="checkAll" onclick="toggleAllChecks()"></th><th class="col-no">No</th><th class="col-title">제목</th><th class="col-date">날짜</th></tr></thead>
+    <tbody id="listBody"></tbody>
+  </table>
+  <button id="moreBtn" class="btn-custom btn-more" onclick="loadList()">더보기 ▾</button>
+</div>
+
+<div id="viewModal" class="modal-overlay" onclick="closeModal(event, 'viewModal', true)">
+  <div class="modal-box">
+    <div class="modal-header"><h3 id="vTitle" style="margin:0; font-size:18px;"></h3><button onclick="closeModalDirect('viewModal')" class="close">×</button></div>
+    <div id="vBody" class="modal-body" style="line-height:1.6;"></div>
+    <div id="vContentEnd" style="padding: 20px; border-top: 1px dashed #ddd;"><div id="vMedia" style="margin-bottom: 15px;"></div><div id="vFiles"></div></div>
+    <div id="vAdminArea" class="modal-footer" style="display:none;"></div>
+  </div>
+</div>
+
+<div id="writeModal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header"><h3 id="wHeader" style="margin:0; font-size:18px;">새 공지사항 작성</h3><button onclick="handleWriteClose()" class="close">×</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="wRowNumber"><input type="hidden" id="wExistingFolderId"><input type="hidden" id="wIsSaved" value="false">
+      <div style="margin-bottom:15px;"><input type="text" id="wTitle" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px;" placeholder="제목을 입력하세요"></div>
+      <div style="margin-bottom:15px;"><textarea id="summernote"></textarea><div style="font-size:12px; color:#ff5252; margin-top:5px;">※ 사진, 영상, 문서는 '파일 추가' 기능을 이용해주세요.</div></div>
+      <div style="border:1px dashed #ddd; padding:10px; background:#fafafa; border-radius:4px;">
+        <label style="font-weight:bold; display:block; margin-bottom:5px;">📎 첨부파일 관리</label>
+        <div id="existingFiles" style="margin-bottom:10px;"></div>
+        <div id="fileList"><div style="margin-bottom:5px;"><input type="file" name="wFiles"></div></div>
+        <button type="button" class="file-add-btn" onclick="addFileInput()">+ 파일 추가</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="btnCancel" class="btn-custom btn-admin" onclick="handleWriteClose()">취소</button>
+      <button class="btn-custom btn-admin" style="background:#ff9800; color:white;" onclick="submitPost('대기')">임시저장 (대기)</button>
+      <button class="btn-custom btn-write" style="display:inline-block;" onclick="submitPost('게시')">작성완료 (게시)</button>
+    </div>
+  </div>
+</div>
+
+<div id="loginModal" class="modal-overlay" onclick="closeModal(event, 'loginModal', true)"><div class="modal-box modal-mini"><div class="modal-header"><h3 style="margin:0; font-size:16px;">관리자 인증</h3><button onclick="closeModalDirect('loginModal')" class="close">×</button></div><div class="modal-body" style="text-align:center;"><input type="password" id="adminPwInput" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px; text-align:center;" onkeyup="if(event.keyCode==13) doLogin()"></div><div class="modal-footer" style="justify-content:center;"><button class="btn-custom btn-write" style="display:inline-block; width:100%;" onclick="doLogin()">확인</button></div></div></div>
+<div id="systemModal" class="modal-overlay"><div class="modal-box modal-mini"><div class="modal-header" style="border-bottom:none;"><h3 id="sysTitle" style="margin:0; font-size:16px;">알림</h3><button onclick="closeSystemModal()" class="close">×</button></div><div id="sysMsg" class="modal-body" style="text-align:center; padding: 20px;"></div><div class="modal-footer" style="border-top:none; justify-content:center;" id="sysBtnArea"></div></div></div>
+<div id="loadingOverlay" class="spinner-overlay"><div class="loader"></div><div id="loadingMsg" style="font-weight:bold; color:#555;">처리 중입니다...</div></div>
+
+<script>
+  // [중요] 배포한 앱스크립트 웹앱 URL을 여기에 넣어야 합니다.
+  // 끝에 /exec 로 끝나는 URL이어야 합니다.
+  var SCRIPT_URL = "여기에_앱스크립트_배포_URL_입력"; 
+
+  var currentPage = 1; var currentAdminKey = ""; var isAdminMode = false; var currentDetail = {};
+
+  $(document).ready(function() {
+    loadList();
+    $('#summernote').summernote({
+      placeholder: '내용을 입력하세요...', tabsize: 2, height: 250, lang: 'ko-KR', dialogsInBody: true,
+      toolbar: [['style',['style']],['font',['bold','underline','color']],['para',['ul','ol','paragraph']],['table',['table']],['insert',['link','hr']],['view',['fullscreen','codeview','help']]]
+    });
+    $('#wTitle, #summernote').on('input change summernote.change', function() { $('#wIsSaved').val('false'); $('#btnCancel').text('취소'); });
+  });
+
+  // [핵심 변경] google.script.run 대체용 API 호출 함수
+  function callApi(action, payload, onSuccess) {
+    var data = payload || {};
+    data.action = action;
+    
+    // fetch API 사용
+    fetch(SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify(data) // 단순히 JSON 문자열을 보냄
+      // CORS 문제로 headers 조작 최소화 (text/plain으로 보냄)
+    })
+    .then(response => response.json())
+    .then(json => {
+       onSuccess(json);
+    })
+    .catch(err => {
+       hideLoading();
+       showModal("통신 오류가 발생했습니다.<br>" + err, 'alert');
+       console.error(err);
+    });
+  }
+
+  // 시스템 모달 로직 (기존 동일)
+  var sysCallback = null;
+  function showModal(msg, type, callback) {
+    $('#sysMsg').html(msg); $('#sysBtnArea').empty(); sysCallback = callback;
+    if (type === 'confirm') {
+      $('#sysTitle').text('확인');
+      $('#sysBtnArea').append('<button class="btn-custom btn-admin" onclick="closeSystemModal()">취소</button>');
+      $('#sysBtnArea').append('<button class="btn-custom btn-write" style="display:inline-block;" onclick="confirmSystemModal()">확인</button>');
+    } else {
+      $('#sysTitle').text('알림');
+      $('#sysBtnArea').append('<button class="btn-custom btn-admin" onclick="confirmSystemModal()">확인</button>');
+    }
+    $('#systemModal').css('display', 'flex');
+  }
+  function closeSystemModal() { $('#systemModal').hide(); }
+  function confirmSystemModal() { $('#systemModal').hide(); if (sysCallback) sysCallback(); }
+
+  // [변경] callApi 사용
+  function loadList() {
+    if(currentPage === 1) $('#listBody').html('<tr><td colspan="4">로딩 중...</td></tr>');
+    callApi("getList", { page: currentPage, adminKey: currentAdminKey }, renderList);
+  }
+
+  function renderList(response) {
+    isAdminMode = response.isAdmin;
+    if (currentPage === 1) $('#listBody').empty();
+    $('.col-chk').show(); 
+    if(isAdminMode) {
+      $('#writeBtn').show(); $('#adminToggleBtn').text('🔓 로그아웃').attr('onclick', 'doLogout()');
+      $('#checkAll').show();
+    } else {
+      $('#writeBtn').hide(); $('#adminToggleBtn').text('🔒 관리자').attr('onclick', 'openLoginModal()');
+      $('#checkAll').hide();
+    }
+    $('#bulkActionArea').hide();
+
+    if (response.items.length === 0 && currentPage === 1) {
+      $('#listBody').html('<tr><td colspan="4">게시글이 없습니다.</td></tr>');
+      $('#moreBtn').hide(); return;
+    }
+
+    response.items.forEach(function(item) {
+      var noDisplay = item.status === "게시" ? item.displayNo : "<span class='badge-wait'>[대기]</span>";
+      var titlePrefix = item.status !== "게시" ? "<span style='color:#ccc'>(비공개) </span>" : "";
+      var chkHtml = isAdminMode ? `<input type="checkbox" class="list-chk" value="${item.rowNumber}" onclick="toggleBulkBtn()">` : "";
+      var html = `<tr><td class="col-chk">${chkHtml}</td><td class="col-no">${noDisplay}</td><td class="col-title" onclick="openDetail(${item.rowNumber})"><span class="title-text">${titlePrefix}${item.title}</span></td><td class="col-date">${item.date}</td></tr>`;
+      $('#listBody').append(html);
+    });
+    if (response.hasMore) { $('#moreBtn').show(); currentPage++; } else { $('#moreBtn').hide(); }
+  }
+
+  // [변경] callApi 사용
+  function openDetail(rowNumber) {
+    $('#vBody').html('로딩 중...'); $('#vMedia').empty(); $('#vFiles').empty(); $('#vAdminArea').hide();
+    $('#viewModal').css('display', 'flex');
+    currentDetail.row = rowNumber;
+    callApi("getPostDetail", { rowNumber: rowNumber }, function(data){ renderDetail(data, rowNumber); });
+  }
+
+  function renderDetail(data, rowNumber) {
+    $('#vTitle').text(data.title); $('#vBody').html(data.content);
+    currentDetail.fileLinks = data.fileLinks; currentDetail.folderId = data.folderId; currentDetail.status = data.status;
+
+    if(isAdminMode) {
+      var buttons = `<button class="btn-custom btn-admin" onclick="openEditMode()">수정</button> `;
+      if (data.status === "게시") buttons += `<button class="btn-custom btn-admin" onclick="changeStatus(${rowNumber}, '대기')">대기전환</button> `;
+      else buttons += `<button class="btn-custom btn-success" onclick="changeStatus(${rowNumber}, '게시')">게시전환</button> `;
+      buttons += `<button class="btn-custom btn-danger" onclick="deletePost(${rowNumber})">삭제</button>`;
+      $('#vAdminArea').html(buttons).show();
+    }
+
+    if (data.fileLinks && data.fileLinks.trim() !== "") {
+      var lines = data.fileLinks.split('\n');
+      lines.forEach(function(line, idx) {
+        if(!line.trim()) return;
+        var parts = line.split('|');
+        var name = parts[0] || "파일"; var url = parts[1] || line; var fileId = parts[2] || "";
+        var uniqueId = "file_" + idx;
+
+        if (url.includes("youtube.com") || url.includes("youtu.be")) {
+          var videoId = getYoutubeId(url);
+          if (videoId) $('#vMedia').append(`<div class="video-container"><iframe src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe></div>`);
+        } else {
+          var icon = "📄";
+          if (/\.(jpg|png|gif)$/i.test(name)) icon = "📷";
+          if (/\.pdf$/i.test(name)) icon = "📕";
+          if (/\.(xls|xlsx)$/i.test(name)) icon = "📊";
+          var downloadUrl = "https://drive.google.com/uc?export=download&id=" + fileId;
+          var html = `
+            <div class="file-accordion-btn" onclick="$('#${uniqueId}').slideToggle()"><span class="file-icon">${icon}</span> ${name}</div>
+            <div id="${uniqueId}" class="file-actions-panel">
+              <a href="https://drive.google.com/file/d/${fileId}/view" target="_blank" class="action-btn btn-view">새 창에서 보기</a>
+              <a href="${downloadUrl}" target="_blank" class="action-btn btn-down">💾 다운로드</a>
+            </div>`;
+          $('#vFiles').append(html);
+        }
+      });
+    }
+  }
+
+  function getYoutubeId(url) {
+    var regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    var match = url.match(regExp); return (match && match[2].length == 11) ? match[2] : null;
+  }
+
+  function openWriteModal() { $('#wHeader').text('새 공지사항 작성'); $('#wRowNumber').val(''); $('#wExistingFolderId').val(''); $('#existingFiles').empty(); $('#wTitle').val(''); $('#summernote').summernote('code', ''); $('#fileList').html('<div style="margin-bottom:5px;"><input type="file" name="wFiles"></div>'); $('#wIsSaved').val('false'); $('#btnCancel').text('취소'); $('#writeModal').css('display', 'flex'); }
+  
+  function openEditMode() {
+    closeModalDirect('viewModal');
+    $('#wHeader').text('공지사항 수정');
+    $('#wRowNumber').val(currentDetail.row);
+    $('#wExistingFolderId').val(currentDetail.folderId);
+    $('#wTitle').val($('#vTitle').text());
+    $('#summernote').summernote('code', $('#vBody').html());
+    
+    $('#existingFiles').empty();
+    if(currentDetail.fileLinks) {
+       var lines = currentDetail.fileLinks.split('\n');
+       lines.forEach(function(line) {
+         if(!line.trim()) return;
+         var parts = line.split('|');
+         var name = parts[0];
+         var html = `
+           <div class="edit-file-item" data-link="${line}">
+             <span>📄 ${name}</span>
+             <button type="button" class="btn-file-del" onclick="$(this).parent().remove()">삭제</button>
+           </div>`;
+         $('#existingFiles').append(html);
+       });
+    }
+    
+    $('#fileList').html('<div style="margin-bottom:5px;"><input type="file" name="wFiles"></div>');
+    $('#wIsSaved').val('false'); $('#btnCancel').text('취소');
+    $('#writeModal').css('display', 'flex');
+  }
+
+  function handleWriteClose() { var isSaved = $('#wIsSaved').val() === 'true'; if (isSaved) { $('#writeModal').hide(); currentPage = 1; loadList(); } else { showModal("작성 중인 내용이 사라집니다.<br>취소하시겠습니까?", 'confirm', function() { $('#writeModal').hide(); }); } }
+  
+  // [변경] callApi 사용
+  function submitPost(status) {
+    var title = $('#wTitle').val(); var content = $('#summernote').summernote('code');
+    if (!title) return showModal("제목을 입력하세요.", 'alert');
+    showLoading("저장 중...");
+    
+    var keptLinks = [];
+    $('.edit-file-item').each(function() {
+      keptLinks.push($(this).attr('data-link'));
+    });
+    
+    var fileInputs = document.getElementsByName('wFiles'); var promises = [];
+    Array.from(fileInputs).forEach(function(input) { if (input.files.length > 0) { var file = input.files[0]; var p = new Promise(function(resolve) { var reader = new FileReader(); reader.onload = function(e) { resolve({ name: file.name, mimeType: file.type, data: e.target.result.split(',')[1] }); }; reader.readAsDataURL(file); }); promises.push(p); } });
+    
+    Promise.all(promises).then(function(files) { 
+      var payload = { 
+        data: {
+            password: currentAdminKey, title: title, content: content, status: status, files: files, 
+            rowNumber: $('#wRowNumber').val(), 
+            existingFolderId: $('#wExistingFolderId').val(), 
+            existingLinks: keptLinks.join('\n')
+        }
+      }; 
+      // callApi로 변경
+      callApi("savePost", payload, function(res) {
+        hideLoading();
+        if (res.success) { 
+          if (status === '게시') { $('#writeModal').hide(); showModal("게시되었습니다.", 'alert', function() { currentPage=1; loadList(); }); } 
+          else { $('#wIsSaved').val('true'); $('#btnCancel').text('닫기'); showModal("임시저장 되었습니다.<br>창을 닫으면 목록이 갱신됩니다.", 'alert', function(){ currentPage=1; loadList(); }); } 
+        } else { showModal("오류: " + res.msg, 'alert'); } 
+      });
+    });
+  }
+
+  function toggleAllChecks() { var checked = $('#checkAll').prop('checked'); $('.list-chk').prop('checked', checked); toggleBulkBtn(); }
+  function toggleBulkBtn() { var count = $('.list-chk:checked').length; if(count > 0) $('#bulkActionArea').css('display', 'flex'); else $('#bulkActionArea').hide(); }
+  
+  // [변경] callApi 사용
+  function doBulk(action) { var checked = $('.list-chk:checked'); if(checked.length === 0) return; var rows = []; checked.each(function() { rows.push($(this).val()); }); var msg = (action === 'delete') ? "정말 삭제하시겠습니까?" : "선택한 항목을 변경하시겠습니까?"; showModal(msg, 'confirm', function() { showLoading("처리 중..."); 
+    callApi("processBulkAction", {actType: action, rows: rows, key: currentAdminKey}, function(res){ hideLoading(); if(res.success) { showModal("처리되었습니다.", 'alert', function() { currentPage=1; loadList(); $('#checkAll').prop('checked', false); }); } else showModal("오류: " + res.msg, 'alert'); }); }); }
+
+  // [변경] callApi 사용
+  function deletePost(row) { showModal("정말 삭제하시겠습니까?", 'confirm', function() { showLoading("삭제 중..."); callApi("deletePost", {row: row, folderId: currentDetail.folderId, key: currentAdminKey}, function(res){ hideLoading(); if(res.success){ showModal("삭제되었습니다.", 'alert', function(){ closeModalDirect('viewModal'); currentPage=1; loadList(); }); } }); }); }
+  
+  // [변경] callApi 사용
+  function changeStatus(row, status) { callApi("updateStatus", {row: row, status: status}, function() { showModal("상태가 변경되었습니다.", 'alert', function(){ closeModalDirect('viewModal'); currentPage=1; loadList(); }); }); }
+  
+  function openLoginModal() { $('#adminPwInput').val(''); $('#loginModal').css('display', 'flex'); setTimeout(function(){$('#adminPwInput').focus();},100); }
+  function doLogin() { var pw=$('#adminPwInput').val(); if(!pw)return; currentAdminKey=pw; currentPage=1; loadList(); closeModalDirect('loginModal'); }
+  function doLogout() { showModal("로그아웃 하시겠습니까?",'confirm',function(){currentAdminKey=""; isAdminMode=false; currentPage=1; loadList();}); }
+  function addFileInput() { $('#fileList').append('<div style="margin-top:5px; display:flex;"><input type="file" name="wFiles"> <button onclick="$(this).parent().remove()" style="border:none; bg:none; color:red; margin-left:5px;">x</button></div>'); }
+  function closeModal(e, id, allowBgClick) { if (allowBgClick && e.target.id === id) document.getElementById(id).style.display = 'none'; }
+  function closeModalDirect(id) { document.getElementById(id).style.display = 'none'; }
+  function showLoading(msg) { $('#loadingMsg').html(msg); $('#loadingOverlay').css('display', 'flex'); }
+  function hideLoading() { $('#loadingOverlay').hide(); }
+</script>
+</body>
+</html>
